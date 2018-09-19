@@ -22,6 +22,10 @@ open import Data.These hiding ( map )
 open import Agda.Primitive
 
 open import Prelude.Sum renaming (Either to _⊎_)
+open import Prelude.Empty
+open import Prelude.Function
+
+open import Def
 
 data Fork : Set where
   fork51 : Fork
@@ -141,125 +145,122 @@ eventuallyNotHungry frk1 frk2 phil n
 
 
 
-
---- Important we need an atomicity condition, meaining that two actions that change the same variable cannot occur at the same time, or when one is possible,
--- there isn't a series of actions (except the first one) that can enable the second action.
--- This atomicity condition should only be proven when we are at the lower level of abstraction , on actions that are to be executed.
-
-
--- Second rule : Given an action A , it should not be possible for a series of actions to change the vars A depended on its cond and also contain actions that depend on the result of that action A.
-
--- If we embed actions, that only contain the vars they read and change, we can probably automate this proof checking.
-
-
-
--- Stuttering ??
-St : ∀{α} → (Set α) ʷ → Bool → (Set α) ʷ
-St A false = A 
-St A true zero = A zero
-St A true (suc zero) = A zero
-St A true (suc (suc n)) = A (suc n)
+-- 
+-- F : ∀{α n} → {v : Vec (Set α) (suc n)} → Set α
+-- F {α} {n} {v} = [ System v ⇒ ○ (System v) ]
+-- 
+-- 
+-- 
+-- 
+-- action : ∀ {α n vars} → Action {α} {n} vars → Set α
+-- action {_} {_} {vars} A = [ (System vars ∧ᵈ (cond A)) ⇒ᵈ ((○ (System vars) ∧↑ᵈ (resp A)) · fstsᵈ) ]
+-- 
+-- 
 
 
-System : ∀{α n} → Vec ((Set α) ʷ) (suc n) → (Set α) ʷ
-System (x ∷ []) = x
-System (x ∷ y ∷ xs) = x ∧ System (y Vec.∷ xs)
+action-dom-embed : ∀ {α n vars} → (act1 act2 : Action {α} {n} vars) → Set α
+action-dom-embed {α} {_} {vars} act1 act2 = ∀ n → (sys : System vars n) → ((cond act1) n sys → (cond act2) n sys )
 
--- Equality between times.
+action-range-embed : ∀ {α n vars} → (act1 act2 : Action {α} {n} vars) → Set α
+action-range-embed {α} {_} {vars} act1 act2 = ∀ n → (sys : System vars n) → (nsys : System vars (suc n)) → (cond act1) n sys → resp act1 n sys nsys → (resp act2) n sys nsys
 
-eqTime : ∀{α β n t} → {vars : Vec ((Set α) ʷ) (suc n)} → (sys : System vars t) → (nsys : System vars (suc t)) → Set β
-eqTime {vars = x ∷ []} sys nsys = {!!}
-eqTime {vars = x ∷ x₁ ∷ vars} sys nsys = {!!}
+action-embed : ∀ {α n vars} → (act1 act2 : Action {α} {n} vars) → Set α
+action-embed {α} {_} {vars} act1 act2 = action-dom-embed act1 act2 × action-range-embed act1 act2
 
+action-stut-embed : ∀ {α n vars} → (act : Action {α} {n} vars) → Set α
+action-stut-embed {α} {_} {vars} act = ∀ n → (sys : System vars n) → (nsys : System vars (suc n)) → (cond act) n sys → resp act n sys nsys → varsEq {vars = vars} sys nsys
 
+data Any {a b} {A : Set a} (P : A → Set b) : ∀{k} → Vec A k → Set (a ⊔ b) where
+  instance
+    zero : ∀ {k x xs} (p : P x) → Any P {suc k} (x ∷ xs)
+    suc : ∀ {k x xs} (i : Any P {k} xs) → Any P {suc k} (x ∷ xs)
 
-pj : ∀{α n} → {vec : Vec ((Set α) ʷ) (suc n)} → (fn : Fin (suc n)) → [ System vec ⇒ indexVec vec fn ]
-pj {_} {.0} {x ∷ []} zero = ids
-pj {_} {.0} {x ∷ []} (suc ()) 
-pj {_} {.(suc _)} {x ∷ y ∷ vec} zero = fsts
-pj {_} {.(suc _)} {x ∷ y ∷ vec} (suc fn) = (pj fn) · snds
+_∈v_ : ∀{a} → {A : Set a} → ∀{k} → A → Vec A k → Set a
+a ∈v xs = Any (a ≡_) xs
 
+action-spec-embed : ∀ {α n k vars} → (act : Action {α} {n} vars) → (spec : Spec {α} {n} {k} vars) → Set (lsuc α)
+action-spec-embed act spec = ∃ λ act2 → (act2 ∈v spec) × (action-embed act act2) 
 
-sys-proj : ∀{α n m} → {vecn : Vec ((Set α) ʷ) (suc n)}
-           → (vfn : Vec (Fin (suc n)) (suc m)) → [ System vecn ⇒ System (fmap′ (indexVec vecn) vfn) ]
-sys-proj (x ∷ []) = pj x
-sys-proj (x ∷ y ∷ vfn) = boths $ʷ pj x $ʷ sys-proj (y ∷ vfn)
+action-spec-embed-with-stut : ∀ {α n k vars} → (act : Action {α} {n} vars) → (spec : Spec {α} {n} {k} vars) → Set (lsuc α)
+action-spec-embed-with-stut act spec = action-spec-embed act spec ⊎ action-stut-embed act
 
-
-
-
-F : ∀{α n} → {v : Vec ((Set α) ʷ) (suc n)} → Set α
-F {α} {n} {v} = [ System v ⇒ ○ (System v) ]
-
-
+spec-embed : ∀ {α n k1 k2 vars} → (spec1 : Spec {α} {n} {k1} vars) → (spec2 : Spec {α} {n} {k2} vars) → Set (lsuc α)
+spec-embed {α} {k1 = .0} (x ∷ []) spec2 = action-spec-embed-with-stut x spec2 
+spec-embed {α} {k1 = .(suc _)} (x ∷ x₁ ∷ spec1) spec2 = action-spec-embed-with-stut x spec2 × spec-embed (x₁ ∷ spec1) spec2
 
 
-record Action {α n} (vars : Vec ((Set α) ʷ) (suc n)) : Set (lsuc α) where
-  field
-    cond : [ System vars ⇒ ⟨ Set α ⟩ ]
-    resp : [ System vars ⇒ ○ (System vars) ⇒ ⟨ Set α ⟩ ]
-
-open Action
-
-
-action : ∀ {α n vars} → Action {α} {n} vars → Set α
-action {_} {_} {vars} A = [ (System vars ∧ᵈ (cond A)) ⇒ᵈ ((○ (System vars) ∧↑ᵈ (resp A)) · fstsᵈ) ]
+spec-action-covering : ∀{α n k vars} → (spec1 : Spec {α} {n} {k} vars) → (act :  Action {α} {n} vars) → Set (lsuc α)
+spec-action-covering {α} {vars = vars} spec1 act = Σ {b = α} (∃ λ n → Vec (action-spec-embed act spec1) n ) λ x
+                                                → let conds = fmap (cond ∘ fst) (snd x)
+                                                  in ∀ n → (sys : System vars n) →
+                                                     let s = vfoldr (λ x y → (x n sys) ⊎ y) (⊥′ {α}) conds
+                                                     in cond act n sys → s
 
 
-Spec : ∀ {α n k} → (vars : Vec ((Set α) ʷ) (suc n)) → Set (lsuc α)
-Spec {_} {_} {k} vars = Vec (Action vars) (suc k)
+spec-covering : ∀ {α n k1 k2 vars} → (spec1 : Spec {α} {n} {k1} vars) → (spec2 : Spec {α} {n} {k2} vars) → Set (lsuc α)
+spec-covering spec1 (x ∷ []) = spec-action-covering spec1 x
+spec-covering spec1 (x ∷ x₁ ∷ spec2) = spec-action-covering spec1 x × spec-covering spec1 (x₁ ∷ spec2)
+-- There are multiple spec-covering and each one determines a different spec2 implementation.
+
+
+spec-comp : ∀ {α n k1 k2 vars} → (spec1 : Spec {α} {n} {k1} vars) → (spec2 : Spec {α} {n} {k2} vars) → Set (lsuc α)
+spec-comp spec1 spec2 = spec-embed spec1 spec2 × spec-covering spec1 spec2
 
 
 
-Vdecide : ∀{α n} → Vec (Set α) (suc n) → Set α
-Vdecide (x ∷ []) = Dec x
-Vdecide (x ∷ x₁ ∷ xs) = Dec x × Vdecide (x₁ ∷ xs)
+
+-- spec-covering allows us to construct actions of spec2 from actions of spec1,
+-- thus any temporal proofs that used actions of spec2 is also valid for spec1 (with the refinement mapping).
+-- There are a multitude of implementations of spec2 , depending on the choice of actions of spec1 that will be chosen in the covering.
+-- For each behavior of spec1, one can construct an implementation of spec2 that permits this behavior. (Is this true ?) This is necessary to
+-- be able to use the theorems of spec2 for the behaviors of spec1.
+
+-- temporal restrictions on the other hand do not need to construct the actions of spec2. We simply take that behavior through the refinement mapping and check whether it
+-- respects it.
 
 
-VdecideP : ∀{α β n} → {Sys : Set β} → (c : Vec (Set α) (suc n)) → Vec (Set β) (suc n) → Sys → Sys → Vdecide c → Set β
-VdecideP (x ∷ []) (y ∷ []) sys nsys (yes z) = y ⊎ [ {!sys ≡ nsys!} ]
-VdecideP (x ∷ []) y sys nsys (no z) = {!!}
-VdecideP (x ∷ x₁ ∷ c) y sys nsys z = {!!}
 
 
-Impl : ∀{α n vars k} → Spec {α} {n} {k} vars → Set α 
-Impl {_} {_} {vars} spec = let conds = fmap cond spec
-                               resps = fmap resp spec
-                           in  ∀ n → {sys : System vars n}
-                               → let vc = fmap (λ f → f n sys) conds
-                                     Ntc = Vdecide vc
-                                 in (ntc : Ntc) → Σ (System vars (suc n)) λ nsys
-                                    → let vr = fmap (λ f → f n sys nsys) resps
-                                      in VdecideP vc vr sys {!!} ntc
-                                    
-                                 
+
+
+
+
 
 data Perit (n : Nat) : Set where
   per : ∀ {k} → k + k + (suc zero) ≡ n → Perit n
 
 data Art (n : Nat) : Set where
-  art : ∀ {k} → k ≡ n → Art n
+  art : ∀ {k} → k + k ≡ n → Art n
 
 
-vars : Vec (Set ʷ) 1
-vars = ⟨ Nat ⟩ ∷ []
+vars : Vec Set 1
+vars = Nat ∷ []
 
-action1 : Action (⟨ Nat ⟩ ∷ [])
+action1 : Action (Nat ∷ [])
 cond action1 = ⟨ Perit ⟩
 resp action1 = λ n ov nv → Art nv
 
-action2 : Action (⟨ Nat ⟩ ∷ [])
+action2 : Action (Nat ∷ [])
 cond action2 = ⟨ Art ⟩
 resp action2 = λ n ov nv → Perit nv
 
 impl1 : Impl (action1 ∷ [])
-impl1 n x = {!!}
+impl1 n sys (yes x) = sys + sys , left (art {k = sys} refl) 
+impl1 n sys (no x) = sys , (right refl)
+
+
+impl2 : Impl (action2 ∷ [])
+impl2 n .(k + k) (yes (art {k} refl)) = k + k + 1 , left (per {k = k} refl)
+impl2 n sys (no x) = sys , right refl
 
 spec : Spec vars
 spec = action1 ∷ action2 ∷ []
 
 impl : Impl spec
-impl = {!!}
+impl n sys (yes x , yes x₁) = {!!}
+impl n sys (yes x , no x₁) = {!!}
+impl n sys (no x , yes x₁) = {!!}
+impl n sys (no x , no x₁) = {!!}
 
 
 
@@ -278,7 +279,7 @@ nTheseP (x ∷ x₁ ∷ c) (y ∷ r) (these z z₁) = y ⊎ nTheseP (x₁ ∷ c)
 -- Do we need to Define "System vars" at all times (t) ?
 -- I do not think that it is necessary.
 
-bob : ∀{α n} → {vars : Vec ((Set α) ʷ) (suc n)}
+bob : ∀{α n} → {vars : Vec (Set α) (suc n)}
     → ( cond : [ System vars ⇒ ⟨ Set α ⟩ ] )
     → ( resp : [ System vars ⇒ ○ (System vars) ⇒ ⟨ Set α ⟩ ] )
     → ( ncond : [ ○ (System vars) ⇒ ⟨ Set α ⟩ ] )
@@ -288,7 +289,7 @@ bob = {!!}
 
 
 
-e : ∀{α n} → {v : Vec ((Set α) ʷ) (suc n)} → (f : [ System v ⇒ ○ (System v) ])
+e : ∀{α n} → {v : Vec (Set α) (suc n)} → (f : [ System v ⇒ ○ (System v) ])
     → (reqc reqr : [ System v ⇒ ⟨ Set α ⟩ ]) → [ (reqc ⇒ₚ ○ reqr) $ʷ f ]
 e = {!!}
 

@@ -1,0 +1,10 @@
+-- Only one can write
+--- Important we need an atomicity condition, meaining that two actions that change the same variable cannot occur at the same time, or when one is possible,
+-- there isn't a series of actions (except the first one) that can enable the second action.
+-- This atomicity condition should only be proven when we are at the lower level of abstraction , on actions that are to be executed.
+
+
+-- Second rule : Given an action A , it should not be possible for a series of actions to change the vars A depended on its cond and also contain actions that depend on the result of that action A. (this can be relaxed)
+-- We cannot have an enablable action that changes the input of A and also an enablable action that depends on both the input and output of action A.
+
+-- If we embed actions, that only contain the vars they read and change, we can probably automate this proof checking.
