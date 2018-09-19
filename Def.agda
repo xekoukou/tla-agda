@@ -12,7 +12,19 @@ open import Prelude.Decidable public
 open import Prelude.Empty public
 open import Prelude.Sum renaming (Either to _⊎_) public
 
-open import Agda.Primitive
+open import Agda.Primitive public
+
+
+
+data Any {a b} {A : Set a} (P : A → Set b) : ∀{k} → Vec A k → Set (a ⊔ b) where
+  instance
+    zero : ∀ {k x xs} (p : P x) → Any P {suc k} (x ∷ xs)
+    suc : ∀ {k x xs} (i : Any P {k} xs) → Any P {suc k} (x ∷ xs)
+
+_∈v_ : ∀{a} → {A : Set a} → ∀{k} → A → Vec A k → Set a
+a ∈v xs = Any (a ≡_) xs
+
+
 
 System : ∀{α n} → Vec (Set α) (suc n) → (Set α) ʷ
 System (x ∷ []) = ⟨ x ⟩
